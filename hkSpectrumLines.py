@@ -20,6 +20,7 @@ def PlotSpectrumLines(ax, lineNameList = []):
             
     else:
         for lineName in lineNameList:
+            # We can have multiple lines with the same name, but at different wavelengths
             indexList = emissionLines['Line'][emissionLines['Line'] == lineName].index.tolist()
             
             for index in indexList:
