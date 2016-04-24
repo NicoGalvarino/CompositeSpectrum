@@ -578,7 +578,7 @@ def CreateSpecCombineParameterFile(binSize = 2., normalisationList = [], wavelen
 
     print('Parameter file written to: ' + filename + '...')
 
-def CreateContinuum(spectrumDf, breakpointList = []):
+def CreatePowerLaw(spectrumDf, breakpointList = []):
 	"""
 	Creates a continuum for spectrumDf.
 	The continuum is calculated using a linear regression model.
@@ -706,6 +706,122 @@ def CreateContinuum(spectrumDf, breakpointList = []):
 	y[indexList] = np.exp(intercept)*x[indexList]**slope
 
 	return y
+
+def CreateContinuum(spectrumDf, breakpointList = [], lineNameList = []):
+	"""
+	Approximates the continuum of a quasar spectrum using power laws.
+	Will make a first estimate, then removes known emission lines, and makes the final estimate.
+
+	IN:
+	spectrumDf: the dataframe containing the spectrum.
+	breakPointList: the wavelength  where one power-law transitions into another.
+
+	OUT:
+	y: the numpy array containing the spectrum, including a column 'continuum'
+	"""
+
+	tempDf = spectrumDf.copy()
+
+	# First estimate
+	tempDf['continuum'] = CreatePowerLaw(tempDf, breakpointList)
+
+	# Remove known spectrum lines
+	LineDf = FindSpectrumLines(tempDf)
+	for _, row in LineDf.iterrows():
+		wavelengthLeft = row['WavelengthLeft']
+		wavelengthRight = row['WavelengthRight']
+
+		indexSpecLeft = tempDf[tempDf['wavelength'] == wavelengthLeft].index.tolist()[0]
+		indexSpecRight = tempDf[tempDf['wavelength'] == wavelengthRight].index.tolist()[0]
+
+		tempDf['mean_f_lambda'].iloc[indexSpecLeft:indexSpecRight] = tempDf['continuum'].iloc[indexSpecLeft:indexSpecRight]
+
+	# Final estimate
+	y = CreatePowerLaw(tempDf, breakpointList)
+
+	return y, tempDf
+
+def FindSpectrumLines(spectrumDf):
+	"""
+	Finds spectrum lines in a given spectrum.
+
+	IN:
+	spectrumDf: the dataframe containing the spectrum.
+	lineNameList: a list with laboratory determined wavelengths of spectrum lines.
+
+	OUT:
+	LineDf: a dataframe with all lines and the associated left and right wavelengths.
+	"""
+
+	# Load the table with known emission lines
+	emissionLines = pd.read_csv('./hkSpectrumLines.csv', skiprows=5)
+
+	# Create temporary storage
+	LineNameList = []
+	LineWavelengthCentre = []
+	LineWavelengthLeft = []
+	LineWavelengthRight = []
+
+	# Loop over all spectrum lines
+	for _, row in emissionLines.iterrows():
+		lineName = row['Line']
+		wavelengthLab = row['Wavelength / Å']
+
+		# Search for the same wavelength in the actual spectrum
+		indexSpec = 0 # Spectrum index
+		while (spectrumDf['wavelength'].iloc[indexSpec] < wavelengthLab):
+			indexSpec = indexSpec + 1
+
+		# IndexSpec now points to the position in SpectrumDf that is associated with the laboratory spectrum line.
+		# The actual spectrum line might however be shifted to the left or to the right.
+		# Let's find the emission peak by checking neighbouring fluxes.
+
+		# First check to the left
+		while (spectrumDf['mean_f_lambda'].iloc[indexSpec-1] > spectrumDf['mean_f_lambda'].iloc[indexSpec]):
+			indexSpec = indexSpec - 1
+
+		# Now check to the right
+		while (spectrumDf['mean_f_lambda'].iloc[indexSpec+1] > spectrumDf['mean_f_lambda'].iloc[indexSpec]):
+			indexSpec = indexSpec + 1
+
+		# indexSpec now points to the emission peak in the actual spectrum
+		# Store the emissionline name and the actual wavelength in a list for later use
+		LineNameList.append(lineName)
+		LineWavelengthCentre.append(spectrumDf['wavelength'].iloc[indexSpec])
+
+#		print("Emission line {0} found at {1:4.2f} Å".format(lineName, spectrumDf['wavelength'].iloc[indexSpec]))
+
+		#
+		# Find the left crossing point with the continuum
+		#
+		indexSpecLeft = indexSpec
+		while (spectrumDf['mean_f_lambda'].iloc[indexSpecLeft] > spectrumDf['continuum'].iloc[indexSpecLeft]):
+			indexSpecLeft = indexSpecLeft - 1
+
+		wavelengthLeft = spectrumDf['wavelength'].iloc[indexSpecLeft]
+		LineWavelengthLeft.append(wavelengthLeft)
+#		print("1: {0:.2f}".format(spectrumDf['wavelength'].iloc[indexSpecLeft]))
+
+		#
+		# Find the right crossing point with the continuum
+		#
+		indexSpecRight = indexSpec
+		while (spectrumDf['mean_f_lambda'].iloc[indexSpecRight] > spectrumDf['continuum'].iloc[indexSpecLeft]):
+			indexSpecRight = indexSpecRight + 1
+
+		wavelengthRight = spectrumDf['wavelength'].iloc[indexSpecRight]
+		LineWavelengthRight.append(wavelengthRight)
+#		print("2: {0:.2f}".format(spectrumDf['wavelength'].iloc[indexSpecRight]))
+
+#		print("Wavelength left: {0:4.2f} Å; wavelength right: {1:4.2f} Å".format(wavelengthLeft, wavelengthRight))
+
+	# Now create the final dataframe
+	LineDf = pd.DataFrame()
+	LineDf['Line'] = LineNameList
+	LineDf['WavelengthLeft'] = LineWavelengthLeft
+	LineDf['WavelengthRight'] = LineWavelengthRight
+
+	return LineDf
 
 def CalculateFwhm1(spectrumDf, lineNameList = []):
 	"""
