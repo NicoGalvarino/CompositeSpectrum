@@ -247,7 +247,7 @@ def NormaliseSpectra(spectraDf):
                 fluxList2.append(flux2)
 
         if((len(fluxList1) == 0) or (len(fluxList2) == 0)):
-            print("ERROR in CombineSpectra: No overlapping region found.")
+            print("ERROR in NormaliseSpectra: No overlapping region found.")
             print("   SpecObjectID1 = {0}; SpecObjectID2 = {1}".format(objectIdList[pointer1], objectIdList[pointer2]))
 
             normalisationFactor = 1.
@@ -275,60 +275,75 @@ def NormaliseSpectra(spectraDf):
     return spectraDf
 
 def CombineSpectra(spectraDf, method = 'GM'):
-    # Copy the wavelength array into a new dataframe
-    compositeDf = pd.DataFrame()
-    compositeDf['wavelength'] = spectraDf['spectrum'][0]['wavelength']
-    compositeDf['mean_f_lambda'] = np.zeros(len(compositeDf.index))
+	"""
+	noise_f_lambda: The uncertainty in the mean spectral flux density, as calculated from combining the uncertainties associated with the individual measurements within each bin
+	unc_f_lambda: The uncertainty in the mean spectral flux density, as derived from the scatter of the data within the bin
+	"""
 
-    # Loop over all fluxes and combine the spectra to 1
-    print("Creating composite spectrum...")
+	# Copy the wavelength array into a new dataframe
+	compositeDf = pd.DataFrame()
+	compositeDf['wavelength'] = spectraDf['spectrum'][0]['wavelength']
+	compositeDf['mean_f_lambda'] = np.zeros(len(compositeDf.index))
+	compositeDf['noise_f_lambda'] = np.zeros(len(compositeDf.index))
+	compositeDf['unc_f_lambda'] = np.zeros(len(compositeDf.index))
+	compositeDf['n_data'] = np.zeros(len(compositeDf.index))
 
-    method = method.upper()
+	# Loop over all fluxes and combine the spectra to 1
+	print("Creating composite spectrum...")
 
-    # Loop over all entries
-    for index in range(len(compositeDf.index)):
-#        print("Index = {0}".format(index))
+	method = method.upper()
 
-        # Create a list of normalised fluxes
-        normalisedFluxList = []
-        noiseList = []
-        uncList = []
+	# Loop over all entries
+	for index in range(len(compositeDf.index)):
+#		 print("Index = {0}".format(index))
 
-        # For each entry, loop over each spectrum
-        for spectrum in spectraDf['spectrum']:
-            normalisedFlux = spectrum['mean_f_lambda'][index]
-            if (normalisedFlux>0):
-                normalisedFluxList.append(normalisedFlux)
+		# Create a list of normalised fluxes
+		normalisedFluxList = []
+		noiseList = []
+		uncList = []
 
-        flux  = 0.
-        noise = 0.
-        unc   = 0.
-        if (method == 'GM'):
-            # Geometric mean
-            if(len(normalisedFluxList) == 0):
-                flux  = 0.
-                noise = 0.
-                unc   = 0.
-            else:
-                flux = sp.gmean(normalisedFluxList)
-        elif (method == 'AM'):
-            # Arithmetic mean
-            if(len(normalisedFluxList) == 0):
-                flux  = 0.
-                noise = 0.
-                unc   = 0.
-            else:
-                flux = np.mean(normalisedFluxList)
-        else:
-            print("ERROR in CombineSpectra: unknown method for combing spectra: " + method)
+		# For each entry, loop over each spectrum
+		for spectrum in spectraDf['spectrum']:
+			normalisedFlux = spectrum['mean_f_lambda'][index]
+			if (normalisedFlux>0):
+				normalisedFluxList.append(normalisedFlux)
 
-        compositeDf['mean_f_lambda'].iloc[index] = flux
+		flux  = 0.
+		noise = 0.
+		unc   = 0.
+		if (method == 'GM'):
+			# Geometric mean
+			if(len(normalisedFluxList) == 0):
+				flux  = 0.
+				noise = 0.
+				unc   = 0.
+				n_data = 0
+			else:
+				flux = sp.gmean(normalisedFluxList)
+				noise = 0. #TODO: Calculate noise
+				unc   = 0. #TODO: Calculate uncertainty
+				n_data = len(normalisedFluxList)
+		elif (method == 'AM'):
+			# Arithmetic mean
+			if(len(normalisedFluxList) == 0):
+				flux  = 0.
+				noise = 0.
+				unc   = 0.
+				n_data = 0
+			else:
+				flux = np.mean(normalisedFluxList)
+				noise = 0. #TODO: Calculate noise
+				unc   = 0. #TODO: Calculate uncertainty
+				n_data = len(normalisedFluxList)
+		else:
+			print("ERROR in CombineSpectra: unknown method for combing spectra: " + method)
 
-    #
-    # What to do with the uncertainties???
-    #
+		compositeDf['mean_f_lambda'].iloc[index] = flux
+		compositeDf['noise_f_lambda'].iloc[index] = noise
+		compositeDf['unc_f_lambda'].iloc[index] = unc
+		compositeDf['n_data'].iloc[index] = n_data
 
-    return compositeDf
+	return compositeDf
 
 def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., method="GM"):
     """
@@ -372,7 +387,7 @@ def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., met
             redShift      = spectrumProperties.field('z') # Final redshift
             objectId      = spectrumProperties.field('SPECOBJID') # Object ID
         except KeyError:
-            print("ERROR in CombineSpectra: Could not retrieve spectrum property...")
+            print("ERROR in CompositeSpectrum: Could not retrieve spectrum property...")
             print(HduList[2].columns.names)
             raise KeyError
 
@@ -806,7 +821,7 @@ def FindSpectrumLines(spectrumDf):
 		# Find the right crossing point with the continuum
 		#
 		indexSpecRight = indexSpec
-		while (spectrumDf['mean_f_lambda'].iloc[indexSpecRight] > spectrumDf['continuum'].iloc[indexSpecLeft]):
+		while (spectrumDf['mean_f_lambda'].iloc[indexSpecRight] > spectrumDf['continuum'].iloc[indexSpecRight]):
 			indexSpecRight = indexSpecRight + 1
 
 		wavelengthRight = spectrumDf['wavelength'].iloc[indexSpecRight]
