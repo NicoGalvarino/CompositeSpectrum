@@ -120,14 +120,14 @@ def ReBinData(spectrumList, binSize, startWavelength, stopWavelength, method = '
 	Re-bins data.
 
 	IN:
-	wavelengthArray: array with wavelengthes to be re-binned.
-	fluxArray: array with fluxes to be re-binned.
-	ivarArray: array with values for uncertainty of measurements.
+	spectrumList: list with spectra.
 	binSize: new size of bins
 	startWavelength: new start wavelength
-	end:Wavelength new end wavelenght
+	endWavelength: new end wavelenght
+	method: method for combining spectra
 
 	OUT:
+	compositeDf: dataframe containing the composite spectrum
 	"""
 
 	newWavelengthArray = np.arange(start=startWavelength, stop=stopWavelength, step = binSize)
@@ -158,10 +158,6 @@ def ReBinData(spectrumList, binSize, startWavelength, stopWavelength, method = '
 			condition2 = (spectrumDf['wavelength'] <  upperWavelength)
 			tempFluxArray = np.append(tempFluxArray, spectrumDf['flux'][condition1 & condition2])
 			tempIvarArray = np.append(tempIvarArray, spectrumDf['ivar'][condition1 & condition2])
-
-#			indexList = spectrumDf[condition1 & condition2].index.tolist() #TODO: Something wrong here
-#			tempFluxArray = np.append(tempFluxArray, spectrumDf['flux'].iloc[indexList])
-#			tempIvarArray = np.append(tempIvarArray, spectrumDf['ivar'].iloc[indexList])
 
 		# Calculate mean flux, uncertainty and noise
 		mean_f_lambda  = 0.
