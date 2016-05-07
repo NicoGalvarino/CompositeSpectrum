@@ -4,275 +4,266 @@ import pandas as pd
 import math
 import os
 import pyfits as fits
+import gc
 
 def ReadSdssDr12FitsFile(inFilename):
-    """
-    Reads a Sloan Digital Sky Survey FITS file.
+	"""
+	Reads a Sloan Digital Sky Survey FITS file.
 
-    IN:
-    inFilename: the filename of the FITS file
+	IN:
+	inFilename: the filename of the FITS file
 
-    OUT:
-    objectID: the ID of the astronomical object
-    redShift: the redshift of the astronomical object
-    dataframe: an Pandas dataframe containing the wavelength and spectral flux density series.
-    """
+	OUT:
+	objectID: the ID of the astronomical object
+	redShift: the redshift of the astronomical object
+	dataframe: an Pandas dataframe containing the wavelength and spectral flux density series.
+	"""
 
-    # See: http://docs.astropy.org/en/stable/io/fits/
+	# See: http://docs.astropy.org/en/stable/io/fits/
 
-    # Open the FITS file read-only and store a list of Header Data Units
-    HduList = fits.open(inFilename)
+	# Open the FITS file read-only and store a list of Header Data Units
+	HduList = fits.open(inFilename)
 
-    # Print the HDU info
-#    HduList.info()
+	# Print the HDU info
+#	HduList.info()
 
-    # Get the first header and print the keys
-    priHeader = HduList[1].header #HduList['PRIMARY'].header
-#    print(repr(priHeader))
+	# Get the first header and print the keys
+	priHeader = HduList[1].header #HduList['PRIMARY'].header
+#	print(repr(priHeader))
 
-    # Get spectrum data is containted in the first extension
-    spectrumData = HduList[1].data #HduList['COADD'].data
-    spectrumColumns = HduList[1].columns.names #HduList['COADD'].columns.names
-#    print(spectrumColumns)
-    dataframe = pd.DataFrame(spectrumData, columns=spectrumColumns)
+	# Get spectrum data is containted in the first extension
+	spectrumData = HduList[1].data #HduList['COADD'].data
+	spectrumColumns = HduList[1].columns.names #HduList['COADD'].columns.names
+#	print(spectrumColumns)
+	dataframe = pd.DataFrame(spectrumData, columns=spectrumColumns)
 
-    # Get the number of records
-    numRecords = len(dataframe.index)
+	# Get the number of records
+	numRecords = len(dataframe.index)
 
-    # Get range of wavelengths contained in the second extension
-    spectrumProperties = HduList[2].data #HduList['SPECOBJ'].data
-#    print(spectrumProperties.columns.names)
-    survey        = spectrumProperties.field(0)[0]
-    minWavelength = spectrumProperties.field('WAVEMIN') # in Angstroms
-    maxWavelength = spectrumProperties.field('WAVEMAX') # in Angstroms
-    covWavelength = spectrumProperties.field('wCoverage') # Coverage in wavelength, in units of log10 wavelength; unsure what this is
-    redShift      = spectrumProperties.field('z') # Final redshift
+	# Get range of wavelengths contained in the second extension
+	spectrumProperties = HduList[2].data #HduList['SPECOBJ'].data
+#	print(spectrumProperties.columns.names)
+	survey        = spectrumProperties.field(0)[0]
+	minWavelength = spectrumProperties.field('WAVEMIN') # in Angstroms
+	maxWavelength = spectrumProperties.field('WAVEMAX') # in Angstroms
+	covWavelength = spectrumProperties.field('wCoverage') # Coverage in wavelength, in units of log10 wavelength; unsure what this is
+	redShift      = spectrumProperties.field('z') # Final redshift
 
-    objectID = ['-1']
-    if(survey.upper() == 'SDSS'):
-        objectID = spectrumProperties.field('BESTOBJID') # Object ID
-    elif(survey.upper() == 'BOSS'):
-        objectID = spectrumProperties.field('OBJID') # Object ID
-    elif(survey.upper() == 'SEQUELS'):
-        objectID = spectrumProperties.field('OBJID') # Object ID
-    else:
-        print("ERROR in ReadSdssDr12FitsFile: Unknow survey type: " + survey + "...")
+	objectID = ['-1']
+	if(survey.upper() == 'SDSS'):
+		objectID = spectrumProperties.field('BESTOBJID') # Object ID
+	elif(survey.upper() == 'BOSS'):
+		objectID = spectrumProperties.field('OBJID') # Object ID
+	elif(survey.upper() == 'SEQUELS'):
+		objectID = spectrumProperties.field('OBJID') # Object ID
+	else:
+		print("ERROR in ReadSdssDr12FitsFile: Unknow survey type: " + survey + "...")
 
-    # Add the wavelengths to the dataframe
-    wavelengthArray = np.logspace(start=np.log10(minWavelength), stop=np.log10(maxWavelength), num = numRecords, endpoint=True)
-    dataframe['wavelength'] = wavelengthArray
+	# Add the wavelengths to the dataframe
+	wavelengthArray = np.logspace(start=np.log10(minWavelength), stop=np.log10(maxWavelength), num = numRecords, endpoint=True)
+	dataframe['wavelength'] = wavelengthArray
 
-    # Close the FITS file
-    HduList.close()
+	# Close the FITS file
+	HduList.close()
 
-    return [objectID, redShift, dataframe]
+	return [objectID, redShift, dataframe]
 
 def ConvertSdssDr12FitsToCsv(inFilename, outFilename):
-    # Load data from the FITS file
-    objId, z, data = ReadSdssDr12FitsFile(inFilename)
-    data.to_csv(outFilename)
-    print("Writing " + outFilename)
+	# Load data from the FITS file
+	objId, z, data = ReadSdssDr12FitsFile(inFilename)
+	data.to_csv(outFilename)
+	print("Writing " + outFilename)
 
 def ConvertAllSdssDr12FitsToCsv(foldername):
-    for inFilename in os.listdir(foldername):
-        if inFilename.endswith('.fits'):
-            inFilename = foldername + inFilename
-            outFilename = inFilename[0:(len(inFilename)-len('.fits'))] + '.csv'
-            ConvertSdssDr12FitsToCsv(inFilename, outFilename)
+	for inFilename in os.listdir(foldername):
+		if inFilename.endswith('.fits'):
+			inFilename = foldername + inFilename
+			outFilename = inFilename[0:(len(inFilename)-len('.fits'))] + '.csv'
+			ConvertSdssDr12FitsToCsv(inFilename, outFilename)
 
 def ToEmittedFrame(z, measuredFrame):
-    """
-    Converts the wavelengthArray to its emitted spectrum
+	"""
+	Converts the wavelengthArray to its emitted spectrum
 
-    IN:
-    z: redshift
-    measuredFrame: the measured wavelengths
+	IN:
+	z: redshift
+	measuredFrame: the measured wavelengths
 
-    OUT:
-    emittedFrame: the wavelengths in the emitted frame
-    """
+	OUT:
+	emittedFrame: the wavelengths in the emitted frame
+	"""
 
-    emittedFrame = measuredFrame / (1+z)
-    return emittedFrame
+	emittedFrame = measuredFrame / (1+z)
+	return emittedFrame
 
 def ConsiderAndMask(fluxArray, andMaskArray):
-    """
-    Zeros all fluxes which have an and_mask > 0
+	"""
+	Zeros all fluxes which have an and_mask > 0
 
-    IN:
-    fluxArray: array of fluxes
-    andMaskArray: array of and_masks
+	IN:
+	fluxArray: array of fluxes
+	andMaskArray: array of and_masks
 
-    OUT:
-    fluxArray: array of modified fluxes
-    """
+	OUT:
+	fluxArray: array of modified fluxes
+	"""
 
-    if (len(fluxArray) != len(andMaskArray)):
-        print("Error in ConsiderAndMask: arrays not compatible.")
-    else:
-        fluxArray = fluxArray * (andMaskArray==0)
+	if (len(fluxArray) != len(andMaskArray)):
+		print("Error in ConsiderAndMask: arrays not compatible.")
+	else:
+		fluxArray = fluxArray * (andMaskArray==0)
 
-    return fluxArray
+	return fluxArray
 
-def ReBinData(wavelengthArray, fluxArray, ivarArray, binSize, startWavelength, stopWavelength):
-    """
-    Re-bins data.
+def ReBinData(spectrumList, binSize, startWavelength, stopWavelength, method = 'AM'):
+	"""
+	Re-bins data.
 
-    IN:
-    wavelengthArray: array with wavelengthes to be re-binned.
-    fluxArray: array with fluxes to be re-binned.
-    ivarArray: array with values for uncertainty of measurements.
-    binSize: new size of bins
-    startWavelength: new start wavelength
-    end:Wavelength new end wavelenght
+	IN:
+	wavelengthArray: array with wavelengthes to be re-binned.
+	fluxArray: array with fluxes to be re-binned.
+	ivarArray: array with values for uncertainty of measurements.
+	binSize: new size of bins
+	startWavelength: new start wavelength
+	end:Wavelength new end wavelenght
 
-    OUT:
-    """
+	OUT:
+	"""
 
-    newWavelengthArray = np.arange(start=startWavelength, stop=stopWavelength, step = binSize)
-    arrayLength = len(newWavelengthArray)
+	newWavelengthArray = np.arange(start=startWavelength, stop=stopWavelength, step = binSize)
+	arrayLength = len(newWavelengthArray)
 
-    newFluxArray = np.zeros(shape=arrayLength)
-    newUncFluxArray = np.zeros(shape=arrayLength)
-    newNoiseFluxArray =  np.zeros(shape=arrayLength)
-    newNumDataArray =  np.zeros(shape=arrayLength)
+	newFluxArray = np.zeros(shape=arrayLength)
+	newUncFluxArray = np.zeros(shape=arrayLength)
+	newNoiseFluxArray =  np.zeros(shape=arrayLength)
+	newNumDataArray =  np.zeros(shape=arrayLength)
 
-    # Define indices on the source arrays
-    lowerIndex = 0
-    upperIndex = 1
+	# Define indices on the destination arrays
+	oldProgress = 0.
+	for index in range(arrayLength):
+		lowerWavelength = newWavelengthArray[index] # - binSize/2.
+		upperWavelength = newWavelengthArray[index] + binSize # + binSize/2.
 
-    for index in range(arrayLength):
-        lowerWavelength = newWavelengthArray[index] - binSize/2.
-        upperWavelength = newWavelengthArray[index] + binSize/2.
+		# Print progress
+		newProgress = 100*float(index)/float(arrayLength)
+		if (newProgress - oldProgress > 1):
+			print('   Rebinning progress: {0:.0F}%...'.format(newProgress))
+			oldProgress = newProgress
 
-        if(upperWavelength < wavelengthArray[0]):
-            # Out of range for wavelengthArray
-            newFluxArray[index] = 0.
-            newUncFluxArray[index] = 0.
-            newNoiseFluxArray[index] = 0.
-            newNumDataArray[index] = 0
+		# Fill temporary arrays
+		tempFluxArray = np.array([])
+		tempIvarArray = np.array([])
+		for spectrumDf in spectrumList:
+			condition1 = (spectrumDf['wavelength'] >= lowerWavelength)
+			condition2 = (spectrumDf['wavelength'] <  upperWavelength)
+			tempFluxArray = np.append(tempFluxArray, spectrumDf['flux'][condition1 & condition2])
+			tempIvarArray = np.append(tempIvarArray, spectrumDf['ivar'][condition1 & condition2])
 
-            #DEBUG
-#            print("upperWavelength = {0:.3G}; wavelengthArray[0] = {1:.3G}".format(upperWavelength, wavelengthArray[0]))
+#			indexList = spectrumDf[condition1 & condition2].index.tolist() #TODO: Something wrong here
+#			tempFluxArray = np.append(tempFluxArray, spectrumDf['flux'].iloc[indexList])
+#			tempIvarArray = np.append(tempIvarArray, spectrumDf['ivar'].iloc[indexList])
 
-        elif(lowerWavelength > wavelengthArray[len(wavelengthArray)-1]):
-            # Out of range for wavelengthArray
-            newFluxArray[index] = 0.
-            newUncFluxArray[index] = 0.
-            newNoiseFluxArray[index] = 0.
-            newNumDataArray[index] = 0
+		# Calculate mean flux, uncertainty and noise
+		mean_f_lambda  = 0.
+		unc_f_lambda   = 0.
+		noise_f_lambda = 0.
+		n_data = len(tempFluxArray)
 
-            #DEBUG
-#            print("lowerWavelength = {0:.3G}; wavelengthArray[max] = {1:.3G}".format(lowerWavelength, wavelengthArray[len(wavelengthArray)-1]))
+		if(n_data>0):
+			# Calculate the uncertainty of the mean value
+			unc_f_lambda = np.std(a=tempFluxArray, ddof=1)/math.sqrt(float(n_data))
 
-        else:
-            # Point indices to the boundaries of this bin. Approach [lowerWavelength, upperWavelength>
-            while (lowerIndex>0) and (wavelengthArray[lowerIndex]>=lowerWavelength):
-                lowerIndex -=1
+			if(method.upper() == 'GM'):
+				# Calculate the geometric mean flux
+				mean_f_lambda = st.gmean(tempFluxArray)
 
-            while (lowerIndex<len(wavelengthArray)-1) and (wavelengthArray[lowerIndex]<lowerWavelength):
-                lowerIndex +=1
+				if(n_data==1):
+					noise_f_lambda = 0.
+				else:
+					# Calculate the the noise of the mean value
+					noise_f_lambda = mean_f_lambda/float(n_data) * math.sqrt(np.sum((1./tempIvarArray)/mean_f_lambda))
 
-            # lowerIndex should now point to the sample where the wavelength >= left size of the bin
+			else:
+				# Calculate the arithmetric mean flux
+				mean_f_lambda = np.mean(tempFluxArray)
 
-            while (upperIndex>0) and (wavelengthArray[upperIndex]>upperWavelength):
-                upperIndex -=1
+				if(n_data==1):
+					noise_f_lambda = 0.
+				else:
+					# Calculate the noise of the mean value
+					noise_f_lambda = 1./float(n_data) * math.sqrt(np.sum(1./tempIvarArray))
 
-            while (upperIndex<len(wavelengthArray)-1) and (wavelengthArray[upperIndex]<=upperWavelength):
-                upperIndex +=1
+		# Store calculated values
+		newFluxArray[index] = mean_f_lambda
+		newUncFluxArray[index] = unc_f_lambda
+		newNoiseFluxArray[index] = noise_f_lambda
+		newNumDataArray[index] = n_data
 
-            # upperIndex should now point to the sample where the wavelength is just beyond upperWavelength
+	# Return the composite spectrum in a dataframe
+	compositeDf = pd.DataFrame({'wavelength':newWavelengthArray, 'mean_f_lambda':newFluxArray, 'noise_f_lambda':newNoiseFluxArray, 'unc_f_lambda':newUncFluxArray, 'n_data':newNumDataArray})
+	return compositeDf
 
-            fluxSlice = fluxArray[lowerIndex:upperIndex]
-            n = len(fluxSlice) # number of samples
-            newNumDataArray[index] = n
-            if(n==0):
-                # No data points in selected range
-                newFluxArray[index] = 0.
-                newUncFluxArray[index] = 0.
-                newNoiseFluxArray[index] = 0.
+def NormaliseSpectra(redshiftList, objectIdList, spectrumList):
+	# Create a dataframe to be sorted
+	spectraDf = pd.DataFrame({'z':redshiftList, 'objID':objectIdList, 'spectrum':spectrumList})
 
-                # DEBUG
-#                print(lowerWavelength, upperWavelength, lowerIndex, upperIndex)
-            else:
-                # Calculate the mean flux
-                newFluxArray[index] = np.mean(fluxSlice)
+	# Sort spectra by redshift
+	spectraDf.sort_values(by='z', inplace=True)
+	spectraDf.index = range(len(spectraDf.index)) # Reset the index (was also sorted)
 
-                if(n==1):
-                    newUncFluxArray[index] = 0.
-                else:
-                    # Calculate the standard deviation
-                    fluxStdev = np.std(a=fluxSlice, ddof=1)
+	# Find the normalisation factors
+	normalisationList = []
+	oldProgress = 0.
+	for index in range(len(spectraDf.index)-1):
+		# Print progress
+		newProgress = 100*float(index)/float(len(spectraDf.index)-1)
+		if (newProgress - oldProgress > 1):
+			print('   Normalising progress: {0:.0F}%...'.format(newProgress))
+			oldProgress = newProgress
 
-                    # Calculate the uncertainty of the mean value
-                    newUncFluxArray[index] = fluxStdev/math.sqrt(float(n))
+#		# Display the redshift
+#		z = spectraDf['z'][index]
+#		print("   Processing redshift: z = {0:.3G}".format(z))
 
-                # Calculate the noise of the measured values
-                ivarSlice = ivarArray[lowerIndex:upperIndex]
-                newNoiseFluxArray[index] = math.sqrt(np.sum(1./ivarSlice))/n
+		# Get current and next rebinned spectra
+		spectrumDf1 = spectraDf['spectrum'][index]
+		spectrumDf2 = spectraDf['spectrum'][index+1]
 
-        lowerIndex = upperIndex
-        if (upperIndex < len(wavelengthArray)-1):
-            upperIndex +=1
+		# Store fluxes in lists
+		fluxList1 = []
+		fluxList2 = []
 
-    spectrumDf = pd.DataFrame({'wavelength':newWavelengthArray, 'mean_f_lambda':newFluxArray, 'noise_f_lambda':newNoiseFluxArray, 'unc_f_lambda':newUncFluxArray, 'n_data':newNumDataArray})
+		for flux1, flux2 in zip(spectrumDf1['flux'], spectrumDf2['flux']):
+			if((flux1 != 0) and (flux2 != 0)):
+				fluxList1.append(flux1)
+				fluxList2.append(flux2)
 
-    return spectrumDf
+		if((len(fluxList1) == 0) or (len(fluxList2) == 0)):
+			print("ERROR in NormaliseSpectra: No overlapping region found.")
+			print("   SpecObjectID1 = {0}; SpecObjectID2 = {1}".format(objectIdList[pointer1], objectIdList[pointer2]))
 
-def NormaliseSpectra(spectraDf):
-    # Sort spectra by redshift
-    spectraDf.sort_values(by='z', inplace=True)
-    spectraDf.index = range(len(spectraDf.index)) # Reset the index (was also sorted)
+			normalisationFactor = 1.
+		else:
+			# Calculate the normalisation factor for spectrum 1
+			normalisationFactor = np.mean(fluxList2)/np.mean(fluxList1)
 
-    # Find the normalisation factors
-    print("Calculating normalisation factors...")
+		# Multiply all normalisation factors before current with the current normalisation factor
+		normalisationList = [x*normalisationFactor for x in normalisationList]
 
-    normalisationList = []
-    for index in range(len(spectraDf.index)-1):
-        # Display the redshift
-        z = spectraDf['z'][index]
-        print("   Processing redshift: z = {0:.3G}".format(z))
+		# Add the current normalisation factor
+		normalisationList.append(normalisationFactor)
 
-        # Get current and next rebinned spectra
-        spectrumDf1 = spectraDf['spectrum'][index]
-        spectrumDf2 = spectraDf['spectrum'][index+1]
+	# Add the normalisation factor for the last spectrum, which is 1, since all previous spectra are normalised to the last spectrum
+	normalisationList.append(1.)
 
-        # Store fluxes in lists
-        fluxList1 = []
-        fluxList2 = []
+	# Normalise the spectra
+	for index in range(len(normalisationList)):
+		normalisationFactor = normalisationList[index]
 
-        for flux1, flux2 in zip(spectrumDf1['mean_f_lambda'], spectrumDf2['mean_f_lambda']):
-            if((flux1 != 0) and (flux2 != 0)):
-                fluxList1.append(flux1)
-                fluxList2.append(flux2)
+		spectraDf['spectrum'][index]['flux'] = spectraDf['spectrum'][index]['flux']*normalisationFactor
+		spectraDf['spectrum'][index]['ivar'] = spectraDf['spectrum'][index]['ivar']*normalisationFactor
 
-        if((len(fluxList1) == 0) or (len(fluxList2) == 0)):
-            print("ERROR in NormaliseSpectra: No overlapping region found.")
-            print("   SpecObjectID1 = {0}; SpecObjectID2 = {1}".format(objectIdList[pointer1], objectIdList[pointer2]))
-
-            normalisationFactor = 1.
-        else:
-            # Calculate the normalisation factor for spectrum 1
-            normalisationFactor = np.mean(fluxList2)/np.mean(fluxList1)
-
-        # Multiply all normalisation factors before current with the current normalisation factor
-        normalisationList = [x*normalisationFactor for x in normalisationList]
-
-        # Add the current normalisation factor
-        normalisationList.append(normalisationFactor)
-
-    # Add the normalisation factor for the last spectrum, which is 1, since all previous spectra are normalised to the last spectrum
-    normalisationList.append(1.)
-
-    # Normalise the spectra
-    for index in range(len(normalisationList)):
-        normalisationFactor = normalisationList[index]
-
-        spectraDf['spectrum'][index]['mean_f_lambda'] = spectraDf['spectrum'][index]['mean_f_lambda']*normalisationFactor
-        spectraDf['spectrum'][index]['unc_f_lambda']  = spectraDf['spectrum'][index]['unc_f_lambda']*normalisationFactor
-        spectraDf['spectrum'][index]['noise_f_lambda']= spectraDf['spectrum'][index]['noise_f_lambda']*normalisationFactor
-
-    return spectraDf
+	return spectraDf
 
 def CombineSpectra(spectraDf, method = 'GM'):
 	"""
@@ -298,300 +289,314 @@ def CombineSpectra(spectraDf, method = 'GM'):
 #		 print("Index = {0}".format(index))
 
 		# Create a list of normalised fluxes
-		normalisedFluxList = []
+		fluxList = []
 		noiseList = []
 		uncList = []
 
 		# For each entry, loop over each spectrum
 		for spectrum in spectraDf['spectrum']:
-			normalisedFlux = spectrum['mean_f_lambda'][index]
-			if (normalisedFlux>0):
-				normalisedFluxList.append(normalisedFlux)
+			flux  = spectrum['mean_f_lambda'][index]
+			noise = spectrum['noise_f_lambda'][index]
+			unc   = spectrum['unc_f_lambda'][index]
 
-		flux  = 0.
-		noise = 0.
-		unc   = 0.
-		if (method == 'GM'):
-			# Geometric mean
-			if(len(normalisedFluxList) == 0):
-				flux  = 0.
-				noise = 0.
-				unc   = 0.
-				n_data = 0
+			if (flux>0):
+				fluxList.append(flux)
+				noiseList.append(noise)
+				uncList.append(unc)
+
+		mean_f_lambda  = 0.
+		n_data         = len(fluxList)
+		noise_f_lambda = 0.
+		unc_f_lambda   = np.std(a=fluxList, ddof=1)/np.sqrt(n_data)
+
+		if(n_data > 0):
+			if (method == 'GM'):
+				# Geometric mean
+				mean_f_lambda  = st.gmean(fluxList)
+
+				relative_noise = []
+				for x, y in zip(noiseList, fluxList):
+					relative_noise.append(x/y)
+
+				noise_f_lambda = mean_f_lambda/n_data * np.sqrt(np.sum(relative_noise))
+			elif (method == 'AM'):
+				# Arithmetic mean
+				mean_f_lambda  = np.mean(fluxList)
+				noise_f_lambda = np.sqrt(np.sum([x**2 for x in noiseList]))/n_data
 			else:
-				flux = sp.gmean(normalisedFluxList)
-				noise = 0. #TODO: Calculate noise
-				unc   = 0. #TODO: Calculate uncertainty
-				n_data = len(normalisedFluxList)
-		elif (method == 'AM'):
-			# Arithmetic mean
-			if(len(normalisedFluxList) == 0):
-				flux  = 0.
-				noise = 0.
-				unc   = 0.
-				n_data = 0
-			else:
-				flux = np.mean(normalisedFluxList)
-				noise = 0. #TODO: Calculate noise
-				unc   = 0. #TODO: Calculate uncertainty
-				n_data = len(normalisedFluxList)
+				print("ERROR in CombineSpectra: unknown method for combing spectra: " + method)
 		else:
-			print("ERROR in CombineSpectra: unknown method for combing spectra: " + method)
+			mean_f_lambda  = 0.
+			noise_f_lambda = 0.
+			unc_f_lambda   = 0.
 
-		compositeDf['mean_f_lambda'].iloc[index] = flux
-		compositeDf['noise_f_lambda'].iloc[index] = noise
-		compositeDf['unc_f_lambda'].iloc[index] = unc
+		compositeDf['mean_f_lambda'].iloc[index] = mean_f_lambda
+		compositeDf['noise_f_lambda'].iloc[index] = noise_f_lambda
+		compositeDf['unc_f_lambda'].iloc[index] = unc_f_lambda
 		compositeDf['n_data'].iloc[index] = n_data
 
 	return compositeDf
 
 def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., method="GM"):
-    """
-    Creates a composite spectrum from multiple spectra.
+	"""
+	Creates a composite spectrum from multiple spectra.
 
-    IN:
+	IN:
 
-    OUT:
-    """
+	OUT:
+	"""
 
-    # Open each fits file and retrieve and store redshift
-    objectIdList = []
-    redshiftList = []
-    spectrumList = []
+	# Open each fits file and retrieve and store redshift
+	objectIdList = []
+	redshiftList = []
+	spectrumList = []
 
-    minWavelengthList = []
-    maxWavelengthList = []
+	minWavelengthList = []
+	maxWavelengthList = []
 
-    #
-    # Load data
-    #
-    for filename in filenameList:
-        print("Processing: " + filename +"...")
-        HduList = fits.open(filename)
+	#
+	# Load data
+	#
+	print("Reading FITS files...")
+	oldProgress = 0.
+	for filename in filenameList:
+		# Print progress
+		newProgress = 100*float(index)/float(arrayLength)
+		if (newProgress - oldProgress > 1):
+			print('   Reading progress: {0:.0F}%...'.format(newProgress))
+			oldProgress = newProgress
 
-        # Get spectrum data is containted in the first extension
-        spectrumData = HduList[1].data #HduList['COADD'].data
-        spectrumColumns = HduList[1].columns.names #HduList['COADD'].columns.names
-        dfSpectrum = pd.DataFrame(spectrumData, columns=spectrumColumns)
+#		print("Processing: " + filename +"...")
+		# Open file
+		HduList = fits.open(filename)
 
-        # Get the number of records
-        numRecords = len(dfSpectrum.index)
+		# Get spectrum data is containted in the first extension
+		spectrumData = HduList[1].data.copy() #HduList['COADD'].data
+		spectrumColumns = HduList[1].columns.names.copy() #HduList['COADD'].columns.names
+		spectrumDf = pd.DataFrame(spectrumData, columns=spectrumColumns)
 
-        # Get range of wavelengths contained in the second extension
-        spectrumProperties = HduList[2].data #HduList['SPECOBJ'].data
+		# Get the number of records
+		numRecords = len(spectrumDf.index)
 
-        try:
-            minWavelength = spectrumProperties.field('WAVEMIN') # in Angstrom
-            maxWavelength = spectrumProperties.field('WAVEMAX') # in Angstrom
-            covWavelength = spectrumProperties.field('wCoverage') # Coverage in wavelength, in units of log10 wavelength; unsure what this is
-            redShift      = spectrumProperties.field('z') # Final redshift
-            objectId      = spectrumProperties.field('SPECOBJID') # Object ID
-        except KeyError:
-            print("ERROR in CompositeSpectrum: Could not retrieve spectrum property...")
-            print(HduList[2].columns.names)
-            raise KeyError
+		# Get range of wavelengths contained in the second extension
+		spectrumProperties = HduList[2].data.copy() #HduList['SPECOBJ'].data
 
-        # Close fits file
-        HduList.close()
+		try:
+			minWavelength = spectrumProperties.field('WAVEMIN') # in Angstrom
+			maxWavelength = spectrumProperties.field('WAVEMAX') # in Angstrom
+			covWavelength = spectrumProperties.field('wCoverage') # Coverage in wavelength, in units of log10 wavelength; unsure what this is
+			redShift      = spectrumProperties.field('z') # Final redshift
+			objectId      = spectrumProperties.field('SPECOBJID') # Object ID
+		except KeyError:
+			print("ERROR in CompositeSpectrum: Could not retrieve spectrum property...")
+			print(HduList[2].columns.names)
+			raise KeyError
 
-        # Create a wavelength array and add it to the dataframe
-        wavelengthArray = np.logspace(start=np.log10(minWavelength), stop=np.log10(maxWavelength), num = numRecords, endpoint=True)
-        dfSpectrum['wavelength'] = wavelengthArray
+		# Explicitly delete references to FITS data to free up file handles and prevent 'too many open files'
+		# See: http://docs.astropy.org/en/stable/io/fits/appendix/faq.html#i-m-opening-many-fits-files-in-a-loop-and-getting-oserror-too-many-open-files
+		del HduList[1].data
+		del HduList[2].data
 
-        # Transform min / max wavelengths to emitted frame
-        minWavelength = minWavelength/(1+redShift)
-        maxWavelength = maxWavelength/(1+redShift)
+		# Close fits file
+		HduList.close()
 
-        # Store all in lists
-        minWavelengthList.append(minWavelength)
-        maxWavelengthList.append(maxWavelength)
+		# Enforce garbage collection
+		gc.collect()
 
-        objectIdList.append(objectId)
-        redshiftList.append(float(redShift))
-        spectrumList.append(dfSpectrum)
+		# Create a wavelength array and add it to the dataframe
+		wavelengthArray = np.logspace(start=np.log10(minWavelength), stop=np.log10(maxWavelength), num = numRecords, endpoint=True)
+		spectrumDf['wavelength'] = wavelengthArray
 
-    # Determine minimum and maximum wavelengths to use for rebinning
-    if (len(wavelengthRange)<2):
-        # Create a proper start and end wavelength based on the info in the FITS files
-        minWavelength = min(minWavelengthList)
-        maxWavelength = max(maxWavelengthList)
+		# Transform min / max wavelengths to emitted frame
+		minWavelength = minWavelength/(1+redShift)
+		maxWavelength = maxWavelength/(1+redShift)
 
-        minWavelength = int(minWavelength/500)*500.0
-        maxWavelength = (int(maxWavelength/500)+1)*500.0
-    else:
-        # Use given range
-        minWavelength = min(wavelenghRange)
-        maxWavelength = max(wavelenghRange)
+		# Store all in lists
+		minWavelengthList.append(minWavelength)
+		maxWavelengthList.append(maxWavelength)
 
-    print("Wavelength range: [{0:.3G}, {1:.3G}]".format(minWavelength, maxWavelength))
+		objectIdList.append(objectId)
+		redshiftList.append(float(redShift))
+		spectrumList.append(spectrumDf)
 
-    #
-    # Correct for redshift, remove bad data and rebin spectrum
-    #
-    print("Correcting for redshift, and rebinning spectra...")
+	# Determine minimum and maximum wavelengths to use for rebinning
+	if (len(wavelengthRange)<2):
+		# Create a proper start and end wavelength based on the info in the FITS files
+		minWavelength = min(minWavelengthList)
+		maxWavelength = max(maxWavelengthList)
 
-    rebinnedList = []
-    for z, spectrumDf in zip(redshiftList, spectrumList):
-        # Correct for redshift
-        spectrumDf['emitted wavelength'] = ToEmittedFrame(z, spectrumDf['wavelength'])
+		minWavelength = int(minWavelength/500)*500.0
+		maxWavelength = (int(maxWavelength/500)+1)*500.0
+	else:
+		# Use given range
+		minWavelength = min(wavelenghRange)
+		maxWavelength = max(wavelenghRange)
 
-        # Zero all suspicious data
-        spectrumDf['flux'] = ConsiderAndMask(spectrumDf['flux'], spectrumDf['and_mask'])
+	print("Wavelength range: [{0:.3G}, {1:.3G}]".format(minWavelength, maxWavelength))
 
-        # Rebin spectrum
-        print("   Processing z = {0:.3G}".format(z))
-        rebinnedDf = ReBinData(spectrumDf['emitted wavelength'], spectrumDf['flux'], spectrumDf['ivar'], binSize, minWavelength, maxWavelength)
+	#
+	# Correct for redshift
+	#
+	print("Correcting for redshift...")
+	for z, spectrumDf in zip(redshiftList, spectrumList):
+		# Correct for redshift
+		spectrumDf['wavelength'] = ToEmittedFrame(z, spectrumDf['wavelength'])
 
-        # DEBUG
-#        spectrumDf.to_csv(str(z)+"_1.csv")
-#        rebinnedSpectrumDf.to_csv(str(z)+"_2.csv")
+	#
+	# Remove bad data
+	#
+	print("Removing bad data...")
+	for spectrumDf in spectrumList:
+		# Zero all suspicious data
+		spectrumDf['flux'] = ConsiderAndMask(spectrumDf['flux'], spectrumDf['and_mask'])
 
-        # Add to rebinnedSpectrumList
-        rebinnedList.append(rebinnedDf)
+	#
+	# Normalise the spectra
+	#
+	print("Calculating normalisation factors...")
+	normalisedDf = NormaliseSpectra(redshiftList, objectIdList, spectrumList)
 
-    #
-    # Normalise the spectra
-    #
-    spectraDf = pd.DataFrame({'z':redshiftList, 'objID':objectIdList, 'spectrum':rebinnedList})
-    normalisedDf = NormaliseSpectra(spectraDf)
+	# Free memory
+	del spectrumList
 
-    #
-    # Combine the individual spectra to a single composite spectrum
-    #
-    compositeDf = CombineSpectra(normalisedDf, method)
+	#
+	# Combine the individual spectra to a single composite spectrum
+	#
+	print("Rebinning data and creating composite...")
+	compositeDf = ReBinData(normalisedDf['spectrum'], binSize, minWavelength, maxWavelength, method)
 
-    # Return the composite spectrum
-    return compositeDf
+	# Return the composite spectrum
+	return compositeDf
 
 
 def CalculateRequiredRedshifts(observedWavelengthRange = (), emittedWavelengthRange = ()):
-    """
-    Calculates a number of redshift for spectra to use in a composite spectrum.
+	"""
+	Calculates a number of redshift for spectra to use in a composite spectrum.
 
-    IN:
-    observedWavelengthRange: the tuple with the minimum and maximum wavelength values that the instrument can measure (in observed frame)
-    emittedWavelengthRange: the tuple with desired wavelength range in the emitted frame.
+	IN:
+	observedWavelengthRange: the tuple with the minimum and maximum wavelength values that the instrument can measure (in observed frame)
+	emittedWavelengthRange: the tuple with desired wavelength range in the emitted frame.
 
-    OUT:
-    redshiftList: A list containing all advised redshifts to use
-    """
+	OUT:
+	redshiftList: A list containing all advised redshifts to use
+	"""
 
-    # emitted frame = observed frame / (1+z)
+	# emitted frame = observed frame / (1+z)
 
-    redshiftList = []
+	redshiftList = []
 
-    # First calculate at the minimum wavelength
-    leftWavelength = min(emittedWavelengthRange)
-    z = min(observedWavelengthRange) / leftWavelength - 1
+	# First calculate at the minimum wavelength
+	leftWavelength = min(emittedWavelengthRange)
+	z = min(observedWavelengthRange) / leftWavelength - 1
 
-    # Calculate the right boundary of the first spectrum
-    rightWavelength = max(observedWavelengthRange) / (1+z)
+	# Calculate the right boundary of the first spectrum
+	rightWavelength = max(observedWavelengthRange) / (1+z)
 
-    # Add redshift to lsit
-    reshiftList.append(z)
+	# Add redshift to lsit
+	reshiftList.append(z)
 
-    # Repeat while rightWavelength < maximum emittedWavelengthRange
-    while rightWavelength < max(emittedWavelengthRange):
-        # Calculate the left boundary of the spectrum
-        leftWavelength = min(emittedWavelengthRange)
-        z = observedWavelengthRange[1] / leftWavelength - 1
+	# Repeat while rightWavelength < maximum emittedWavelengthRange
+	while rightWavelength < max(emittedWavelengthRange):
+		# Calculate the left boundary of the spectrum
+		leftWavelength = min(emittedWavelengthRange)
+		z = observedWavelengthRange[1] / leftWavelength - 1
 
-        # Calculate the right boundary of the spectrum
-        rightWavelength = observedWavelengthRange[2] / (1+z)
+		# Calculate the right boundary of the spectrum
+		rightWavelength = observedWavelengthRange[2] / (1+z)
 
-        # Add redshift to lsit
-        reshiftList.append(z)
+		# Add redshift to lsit
+		reshiftList.append(z)
 
 
-    return redshiftList
+	return redshiftList
 
 def CreateSpecCombineParameterFile(binSize = 2., normalisationList = [], wavelengthRange = (), foldername = ".", parameterFilename = 'input.txt', csvFilename = 'output.csv'):
-    """
-    Create a parameter file for the programme 'SpecCombine.exe'
+	"""
+	Create a parameter file for the programme 'SpecCombine.exe'
 
-    IN:
-    binSize: the size of the bins in Angstrom. Default = 2A
-    normalisationList: list of normalisation factors
-    wavelengthRange: tuple of the minimum and maximum wavelength for the composite spectrum.
-    foldername: name of the working folder. Default is current folder.
-    parameterFilename: the name of the input file for SpecCombine. This file will be generated. Default 'input.txt'
-    output.csv: the name of the CSV file that SpecCombine must generate. Default 'output.csv'
+	IN:
+	binSize: the size of the bins in Angstrom. Default = 2A
+	normalisationList: list of normalisation factors
+	wavelengthRange: tuple of the minimum and maximum wavelength for the composite spectrum.
+	foldername: name of the working folder. Default is current folder.
+	parameterFilename: the name of the input file for SpecCombine. This file will be generated. Default 'input.txt'
+	output.csv: the name of the CSV file that SpecCombine must generate. Default 'output.csv'
 
-    OUT:
-    -
-    """
+	OUT:
+	-
+	"""
 
-    # Store the names of fits-files
-    filenameList = []
-    for filename in os.listdir(foldername):
-        if filename.endswith(".fits"):
-            filenameList.append(filename)
+	# Store the names of fits-files
+	filenameList = []
+	for filename in os.listdir(foldername):
+		if filename.endswith(".fits"):
+			filenameList.append(filename)
 
-    # If the length of the normalisation list < length filename list, then make the normalisation factor 1. for the missing items
-    if len(normalisationList) < len(filenameList):
-        for index in range(len(normalisationList), len(filenameList)):
-            normalisationList.append(1.)
+	# If the length of the normalisation list < length filename list, then make the normalisation factor 1. for the missing items
+	if len(normalisationList) < len(filenameList):
+		for index in range(len(normalisationList), len(filenameList)):
+			normalisationList.append(1.)
 
-    # Open each fits file and retrieve and store redshift
-    minWavelengthList = []
-    maxWavelengthList = []
-    redshiftList = []
+	# Open each fits file and retrieve and store redshift
+	minWavelengthList = []
+	maxWavelengthList = []
+	redshiftList = []
 
-    for filename in filenameList:
-        fullname = foldername +filename
-        print("Processing: " + fullname +"...")
-        HduList = fits.open(fullname)
+	for filename in filenameList:
+		fullname = foldername +filename
+		print("Processing: " + fullname +"...")
+		HduList = fits.open(fullname)
 
-        # Get range of wavelengths
-        spectrumProperties = HduList[2].data # HduList['SPECOBJ'].data
-        minWavelength = float(spectrumProperties.field('WAVEMIN')) # in Angstroms
-        maxWavelength = float(spectrumProperties.field('WAVEMAX')) # in Angstroms
-        redshift      = float(spectrumProperties.field('z')) # Final redshift
+		# Get range of wavelengths
+		spectrumProperties = HduList[2].data # HduList['SPECOBJ'].data
+		minWavelength = float(spectrumProperties.field('WAVEMIN')) # in Angstroms
+		maxWavelength = float(spectrumProperties.field('WAVEMAX')) # in Angstroms
+		redshift      = float(spectrumProperties.field('z')) # Final redshift
 
-        # Transform wavelengths to emitted frame
-        minWavelength = minWavelength/(1+redshift)
-        maxWavelength = maxWavelength/(1+redshift)
+		# Transform wavelengths to emitted frame
+		minWavelength = minWavelength/(1+redshift)
+		maxWavelength = maxWavelength/(1+redshift)
 
-        # Store all in lists
-        minWavelengthList.append(minWavelength)
-        maxWavelengthList.append(maxWavelength)
-        redshiftList.append(redshift)
+		# Store all in lists
+		minWavelengthList.append(minWavelength)
+		maxWavelengthList.append(maxWavelength)
+		redshiftList.append(redshift)
 
-        # Close fits file
-        HduList.close()
+		# Close fits file
+		HduList.close()
 
-    if (len(wavelengthRange)<2):
-        # Create a proper start and end wavelength based on the info in the FITS files
-        minWavelength = min(minWavelengthList)
-        maxWavelength = max(maxWavelengthList)
+	if (len(wavelengthRange)<2):
+		# Create a proper start and end wavelength based on the info in the FITS files
+		minWavelength = min(minWavelengthList)
+		maxWavelength = max(maxWavelengthList)
 
-        minWavelength = int(minWavelength/500)*500.0
-        maxWavelength = (int(maxWavelength/500)+1)*500.0
-    else:
-        # Use given range
-        minWavelength = min(wavelenghRange)
-        maxWavelength = max(wavelenghRange)
+		minWavelength = int(minWavelength/500)*500.0
+		maxWavelength = (int(maxWavelength/500)+1)*500.0
+	else:
+		# Use given range
+		minWavelength = min(wavelenghRange)
+		maxWavelength = max(wavelenghRange)
 
-    print("Wavelength range: [{0:.3G}, {1:.3G}]".format(minWavelength, maxWavelength))
+	print("Wavelength range: [{0:.3G}, {1:.3G}]".format(minWavelength, maxWavelength))
 
-    # Store to SpecCombine input file
-    filename = foldername + parameterFilename
-    with open(filename, 'w') as f:
-        # Write the number of files to use
-        f.write(str(len(filenameList))+'\n')
+	# Store to SpecCombine input file
+	filename = foldername + parameterFilename
+	with open(filename, 'w') as f:
+		# Write the number of files to use
+		f.write(str(len(filenameList))+'\n')
 
 
-        # Write the minimum wavelength, maximum wavelength, bin size
-        f.write(str(minWavelength) + ',' + str(maxWavelength) + ',' + str(binSize) + '\n')
+		# Write the minimum wavelength, maximum wavelength, bin size
+		f.write(str(minWavelength) + ',' + str(maxWavelength) + ',' + str(binSize) + '\n')
 
-        # Write the SpecCombine output filename
-        f.write(csvFilename + '\n')
+		# Write the SpecCombine output filename
+		f.write(csvFilename + '\n')
 
-        # Write for each spectrum the redshift, normalisation factor, fits filename
-        for z, normalisationFactor, fitsFile in zip(redshiftList, normalisationList, filenameList):
-            f.write(str(z) +',' + str(normalisationFactor) + ',' + fitsFile + '\n')
+		# Write for each spectrum the redshift, normalisation factor, fits filename
+		for z, normalisationFactor, fitsFile in zip(redshiftList, normalisationList, filenameList):
+			f.write(str(z) +',' + str(normalisationFactor) + ',' + fitsFile + '\n')
 
-    print('Parameter file written to: ' + filename + '...')
+	print('Parameter file written to: ' + filename + '...')
 
 def CreatePowerLaw(spectrumDf, breakpointList = []):
 	"""
@@ -600,7 +605,7 @@ def CreatePowerLaw(spectrumDf, breakpointList = []):
 
 	IN:
 	spectrumDf: the dataframe containing the spectrum.
-	breakPointList: the wavelength  where one power-law transitions into another.
+	breakPointList: the wavelength where one power-law transitions into another.
 
 	OUT:
 	y: the numpy array containing the spectrum, including a column 'continuum'
@@ -625,7 +630,7 @@ def CreatePowerLaw(spectrumDf, breakpointList = []):
 			# ... the middle piece...
 			breakpoint1 = breakpointList[index-1]
 			breakpoint2 = breakpointList[index]
-			condition2 = (spectrumDf['wavelength']>breakpoint1)
+			condition2 = (spectrumDf['wavelength'] >  breakpoint1)
 			condition3 = (spectrumDf['wavelength'] <= breakpoint2)
 
 			indexList = spectrumDf[condition1 & condition2 & condition3].index.tolist()
