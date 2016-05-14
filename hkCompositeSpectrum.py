@@ -115,7 +115,7 @@ def ConsiderAndMask(fluxArray, andMaskArray):
 
 	return fluxArray
 
-def ReBinData(spectrumList, binSize, startWavelength, stopWavelength, method = 'AM'):
+def ReBinData(spectrumList, binSize, startWavelength, stopWavelength, method = "AM"):
 	"""
 	Re-bins data.
 
@@ -141,14 +141,15 @@ def ReBinData(spectrumList, binSize, startWavelength, stopWavelength, method = '
 	# Define indices on the destination arrays
 	oldProgress = 0.
 	for index in range(arrayLength):
-		lowerWavelength = newWavelengthArray[index] # - binSize/2.
-		upperWavelength = newWavelengthArray[index] + binSize # + binSize/2.
-
 		# Print progress
 		newProgress = 100*float(index)/float(arrayLength)
 		if (newProgress - oldProgress > 1):
 			print('   Rebinning progress: {0:.0F}%...'.format(newProgress))
 			oldProgress = newProgress
+
+		# Calculate bin boundaries
+		lowerWavelength = newWavelengthArray[index] # - binSize/2.
+		upperWavelength = newWavelengthArray[index] + binSize # + binSize/2.
 
 		# Fill temporary arrays
 		tempFluxArray = np.array([])
@@ -165,29 +166,36 @@ def ReBinData(spectrumList, binSize, startWavelength, stopWavelength, method = '
 		noise_f_lambda = 0.
 		n_data = len(tempFluxArray)
 
-		if(n_data>0):
+		if(n_data == 0):
+			print("ERROR in ReBinData: No data in bin {0:.0F} - {1:.0F}".format(lowerWavelength, upperWavelength))
+
+		elif(n_data == 1):
+			print("WARNING in ReBinData: One data point only in bin {0:.0F} - {1:.0F}".format(lowerWavelength, upperWavelength))
+
+			mean_f_lambda  = tempFluxArray[0]
+			noise_f_lambda = 1./tempIvarArray[0]
+			unc_f_lambda   = 0.
+
+		else:
 			# Calculate the uncertainty of the mean value
 			unc_f_lambda = np.std(a=tempFluxArray, ddof=1)/math.sqrt(float(n_data))
 
 			if(method.upper() == 'GM'):
+				# Set all values <0 to 1
+				tempFluxArray[tempFluxArray<=0] = 1.
+
 				# Calculate the geometric mean flux
 				mean_f_lambda = st.gmean(tempFluxArray)
 
-				if(n_data==1):
-					noise_f_lambda = 0.
-				else:
-					# Calculate the the noise of the mean value
-					noise_f_lambda = mean_f_lambda/float(n_data) * math.sqrt(np.sum((1./tempIvarArray)/mean_f_lambda))
+				# Calculate the the noise of the mean value
+				noise_f_lambda = mean_f_lambda/float(n_data) * math.sqrt(np.sum((1./tempIvarArray)/mean_f_lambda))
 
 			else:
 				# Calculate the arithmetric mean flux
 				mean_f_lambda = np.mean(tempFluxArray)
 
-				if(n_data==1):
-					noise_f_lambda = 0.
-				else:
-					# Calculate the noise of the mean value
-					noise_f_lambda = 1./float(n_data) * math.sqrt(np.sum(1./tempIvarArray))
+				# Calculate the noise of the mean value
+				noise_f_lambda = 1./float(n_data) * math.sqrt(np.sum(1./tempIvarArray))
 
 		# Store calculated values
 		newFluxArray[index] = mean_f_lambda
@@ -261,7 +269,7 @@ def NormaliseSpectra(redshiftList, objectIdList, spectrumList):
 
 	return spectraDf
 
-def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., method="GM"):
+def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., method = "AM"):
 	"""
 	Creates a composite spectrum from multiple spectra.
 
@@ -281,16 +289,10 @@ def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., met
 	#
 	# Load data
 	#
-	print("Reading FITS files...")
-	oldProgress = 0.
+	print("Reading {0} FITS files...".format(len(filenameList)))
 	for filename in filenameList:
-		# Print progress
-		newProgress = 100*float(index)/float(arrayLength)
-		if (newProgress - oldProgress > 1):
-			print('   Reading progress: {0:.0F}%...'.format(newProgress))
-			oldProgress = newProgress
+		print("Processing: " + filename +"...")
 
-#		print("Processing: " + filename +"...")
 		# Open file
 		HduList = fits.open(filename)
 
@@ -306,11 +308,11 @@ def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., met
 		spectrumProperties = HduList[2].data.copy() #HduList['SPECOBJ'].data
 
 		try:
-			minWavelength = spectrumProperties.field('WAVEMIN') # in Angstrom
-			maxWavelength = spectrumProperties.field('WAVEMAX') # in Angstrom
-			covWavelength = spectrumProperties.field('wCoverage') # Coverage in wavelength, in units of log10 wavelength; unsure what this is
-			redShift      = spectrumProperties.field('z') # Final redshift
-			objectId      = spectrumProperties.field('SPECOBJID') # Object ID
+			minWavelength = float(spectrumProperties.field('WAVEMIN')) # in Angstrom
+			maxWavelength = float(spectrumProperties.field('WAVEMAX')) # in Angstrom
+			covWavelength = float(spectrumProperties.field('wCoverage')) # Coverage in wavelength, in units of log10 wavelength; unsure what this is
+			redShift      = float(spectrumProperties.field('z')) # Final redshift
+			objectId      = str(spectrumProperties.field('SPECOBJID')) # Object ID
 		except KeyError:
 			print("ERROR in CompositeSpectrum: Could not retrieve spectrum property...")
 			print(HduList[2].columns.names)
@@ -340,7 +342,7 @@ def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., met
 		maxWavelengthList.append(maxWavelength)
 
 		objectIdList.append(objectId)
-		redshiftList.append(float(redShift))
+		redshiftList.append(redShift)
 		spectrumList.append(spectrumDf)
 
 	# Determine minimum and maximum wavelengths to use for rebinning
@@ -349,8 +351,8 @@ def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., met
 		minWavelength = min(minWavelengthList)
 		maxWavelength = max(maxWavelengthList)
 
-		minWavelength = int(minWavelength/500)*500.0
-		maxWavelength = (int(maxWavelength/500)+1)*500.0
+#		minWavelength = int(minWavelength/500)*500.0
+#		maxWavelength = (int(maxWavelength/500)+1)*500.0
 	else:
 		# Use given range
 		minWavelength = min(wavelenghRange)
@@ -532,7 +534,10 @@ def CreatePowerLaw(spectrumDf, breakpointList = []):
 	breakPointList: the wavelength where one power-law transitions into another.
 
 	OUT:
-	y: the numpy array containing the spectrum, including a column 'continuum'
+	y:              the numpy array containing the spectrum, including a column 'continuum'
+	slopeList:      the list containing the slopes of the line elements in the log-log plane
+	interceptList:  the list containing the intercepting points with the y-axis of the line elements in the loglog plane
+	breakPointList: the list containing the final breakpoints between the line segments
 	"""
 
 	# Calculate the linear pieces
@@ -649,7 +654,7 @@ def CreatePowerLaw(spectrumDf, breakpointList = []):
 	x[indexList] = spectrumDf['wavelength'].iloc[indexList]
 	y[indexList] = np.exp(intercept)*x[indexList]**slope
 
-	return y
+	return y, slopeList, interceptList, breakPointList
 
 def CreateContinuum(spectrumDf, breakpointList = [], lineNameList = []):
 	"""
@@ -661,13 +666,13 @@ def CreateContinuum(spectrumDf, breakpointList = [], lineNameList = []):
 	breakPointList: the wavelength  where one power-law transitions into another.
 
 	OUT:
-	y: the numpy array containing the spectrum, including a column 'continuum'
+	y:              the numpy array containing the spectrum, including a column 'continuum'
 	"""
 
 	tempDf = spectrumDf.copy()
 
 	# First estimate
-	tempDf['continuum'] = CreatePowerLaw(tempDf, breakpointList)
+	tempDf['continuum'], _, _, _ = CreatePowerLaw(tempDf, breakpointList)
 
 	# Remove known spectrum lines
 	LineDf = FindSpectrumLines(tempDf)
@@ -681,7 +686,7 @@ def CreateContinuum(spectrumDf, breakpointList = [], lineNameList = []):
 		tempDf['mean_f_lambda'].iloc[indexSpecLeft:indexSpecRight] = tempDf['continuum'].iloc[indexSpecLeft:indexSpecRight]
 
 	# Final estimate
-	y = CreatePowerLaw(tempDf, breakpointList)
+	y, _, _, _ = CreatePowerLaw(tempDf, breakpointList)
 
 	return y, tempDf
 
