@@ -3,7 +3,8 @@ import scipy.stats as st
 import pandas as pd
 import math
 import os
-import pyfits as fits
+# import pyfits as fits
+from astropy.io import fits
 import gc
 
 def ReadSdssDr12FitsFile(inFilename):
@@ -46,7 +47,7 @@ def ReadSdssDr12FitsFile(inFilename):
 	survey        = spectrumProperties.field(0)[0]
 	minWavelength = spectrumProperties.field('WAVEMIN') # in Angstroms
 	maxWavelength = spectrumProperties.field('WAVEMAX') # in Angstroms
-	covWavelength = spectrumProperties.field('wCoverage') # Coverage in wavelength, in units of log10 wavelength; unsure what this is
+	covWavelength = spectrumProperties.field('wCoverage') # Coverage in wavelength, in log10 wavelength; unsure what this is
 	redShift      = spectrumProperties.field('z') # Final redshift
 
 	objectID = ['-1']
@@ -204,7 +205,9 @@ def ReBinData(spectrumList, binSize, startWavelength, stopWavelength, method = "
 		newNumDataArray[index] = n_data
 
 	# Return the composite spectrum in a dataframe
-	compositeDf = pd.DataFrame({'wavelength':newWavelengthArray, 'mean_f_lambda':newFluxArray, 'noise_f_lambda':newNoiseFluxArray, 'unc_f_lambda':newUncFluxArray, 'n_data':newNumDataArray})
+	compositeDf = pd.DataFrame({'wavelength':newWavelengthArray, 'mean_f_lambda':newFluxArray, 
+							 'noise_f_lambda':newNoiseFluxArray, 'unc_f_lambda':newUncFluxArray, 
+							 'n_data':newNumDataArray})
 	return compositeDf
 
 def NormaliseSpectra(redshiftList, objectIdList, spectrumList):
@@ -242,9 +245,9 @@ def NormaliseSpectra(redshiftList, objectIdList, spectrumList):
 				fluxList1.append(flux1)
 				fluxList2.append(flux2)
 
-		if((len(fluxList1) == 0) or (len(fluxList2) == 0)):
+		if ((len(fluxList1) == 0) or (len(fluxList2) == 0)):
 			print("ERROR in NormaliseSpectra: No overlapping region found.")
-			print("   SpecObjectID1 = {0}; SpecObjectID2 = {1}".format(objectIdList[pointer1], objectIdList[pointer2]))
+			# print("   SpecObjectID1 = {0}; SpecObjectID2 = {1}".format(objectIdList[pointer1], objectIdList[pointer2]))
 
 			normalisationFactor = 1.
 		else:
@@ -269,7 +272,8 @@ def NormaliseSpectra(redshiftList, objectIdList, spectrumList):
 
 	return spectraDf
 
-def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., method = "AM"):
+def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., method = "AM", 
+					  redshift='in fits', z_list=None):
 	"""
 	Creates a composite spectrum from multiple spectra.
 
@@ -290,7 +294,9 @@ def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., met
 	# Load data
 	#
 	print("Reading {0} FITS files...".format(len(filenameList)))
-	for filename in filenameList:
+	# for filename in filenameList:
+	for i in range(len(filenameList)):
+		filename = filenameList[i]
 		print("Processing: " + filename +"...")
 
 		# Open file
@@ -311,7 +317,12 @@ def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., met
 			minWavelength = float(spectrumProperties.field('WAVEMIN')) # in Angstrom
 			maxWavelength = float(spectrumProperties.field('WAVEMAX')) # in Angstrom
 			covWavelength = float(spectrumProperties.field('wCoverage')) # Coverage in wavelength, in units of log10 wavelength; unsure what this is
-			redShift      = float(spectrumProperties.field('z')) # Final redshift
+			
+			if redshift == 'in fits':
+				redShift      = float(spectrumProperties.field('z')) # Final redshift
+			else:
+				redShift = z_list[i]
+
 			objectId      = str(spectrumProperties.field('SPECOBJID')) # Object ID
 		except KeyError:
 			print("ERROR in CompositeSpectrum: Could not retrieve spectrum property...")
@@ -342,7 +353,12 @@ def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., met
 		maxWavelengthList.append(maxWavelength)
 
 		objectIdList.append(objectId)
-		redshiftList.append(redShift)
+
+		if redshift == 'in fits':
+			redshiftList.append(redShift)
+		else:
+			redshiftList = z_list
+		
 		spectrumList.append(spectrumDf)
 
 	# Determine minimum and maximum wavelengths to use for rebinning
@@ -355,8 +371,8 @@ def CompositeSpectrum(filenameList = [], wavelengthRange = (), binSize = 4., met
 #		maxWavelength = (int(maxWavelength/500)+1)*500.0
 	else:
 		# Use given range
-		minWavelength = min(wavelenghRange)
-		maxWavelength = max(wavelenghRange)
+		minWavelength = min(wavelengthRange)
+		maxWavelength = max(wavelengthRange)
 
 	print("Wavelength range: [{0:.3G}, {1:.3G}]".format(minWavelength, maxWavelength))
 
@@ -419,7 +435,7 @@ def CalculateRequiredRedshifts(observedWavelengthRange = (), emittedWavelengthRa
 	rightWavelength = max(observedWavelengthRange) / (1+z)
 
 	# Add redshift to lsit
-	reshiftList.append(z)
+	redshiftList.append(z)
 
 	# Repeat while rightWavelength < maximum emittedWavelengthRange
 	while rightWavelength < max(emittedWavelengthRange):
@@ -431,7 +447,7 @@ def CalculateRequiredRedshifts(observedWavelengthRange = (), emittedWavelengthRa
 		rightWavelength = observedWavelengthRange[2] / (1+z)
 
 		# Add redshift to lsit
-		reshiftList.append(z)
+		redshiftList.append(z)
 
 
 	return redshiftList
@@ -500,8 +516,8 @@ def CreateSpecCombineParameterFile(binSize = 2., normalisationList = [], wavelen
 		maxWavelength = (int(maxWavelength/500)+1)*500.0
 	else:
 		# Use given range
-		minWavelength = min(wavelenghRange)
-		maxWavelength = max(wavelenghRange)
+		minWavelength = min(wavelengthRange)
+		maxWavelength = max(wavelengthRange)
 
 	print("Wavelength range: [{0:.3G}, {1:.3G}]".format(minWavelength, maxWavelength))
 
@@ -566,13 +582,17 @@ def CreatePowerLaw(spectrumDf, breakpointList = []):
 			x = np.log(spectrumDf['wavelength'].iloc[indexList])
 			y = np.log(spectrumDf['mean_f_lambda'].iloc[indexList])
 
-		slope, intercept, r_value, p_value, std_err = st.linregress(x, y)
+		if len(x) > 0 and len(y) > 0:
+			slope, intercept, r_value, p_value, std_err = st.linregress(x, y)
 
-		print("slope = {0:.3G}; intercept = {1:.3G}; std_err = {2:.3G}".format(slope, intercept, std_err))
+			print("slope = {0:.3G}; intercept = {1:.3G}; std_err = {2:.3G}".format(slope, intercept, std_err))
 
-		slopeList.append(slope)
-		interceptList.append(intercept)
-		stdErrList.append(std_err)
+			slopeList.append(slope)
+			interceptList.append(intercept)
+			stdErrList.append(std_err)
+		
+		else:
+			pass
 
 	# ...and the last piece
 	breakpoint = breakpointList[-1]
@@ -582,13 +602,17 @@ def CreatePowerLaw(spectrumDf, breakpointList = []):
 	x = np.log(spectrumDf['wavelength'].iloc[indexList])
 	y = np.log(spectrumDf['mean_f_lambda'].iloc[indexList])
 
-	slope, intercept, r_value, p_value, std_err = st.linregress(x, y)
+	if len(x) > 0 and len(y) > 0:
+		slope, intercept, r_value, p_value, std_err = st.linregress(x, y)
 
-	print("slope = {0:.3G}; intercept = {1:.3G}; std_err = {2:.3G}".format(slope, intercept, std_err))
+		print("slope = {0:.3G}; intercept = {1:.3G}; std_err = {2:.3G}".format(slope, intercept, std_err))
 
-	slopeList.append(slope)
-	interceptList.append(intercept)
-	stdErrList.append(std_err)
+		slopeList.append(slope)
+		interceptList.append(intercept)
+		stdErrList.append(std_err)
+
+	else:
+		pass
 
 	# Create a new breakpoint list based on interceptions between line elements
 	breakpointList = []
@@ -654,7 +678,7 @@ def CreatePowerLaw(spectrumDf, breakpointList = []):
 	x[indexList] = spectrumDf['wavelength'].iloc[indexList]
 	y[indexList] = np.exp(intercept)*x[indexList]**slope
 
-	return y, slopeList, interceptList, breakPointList
+	return y, slopeList, interceptList, breakpointList
 
 def CreateContinuum(spectrumDf, breakpointList = [], lineNameList = []):
 	"""
@@ -703,13 +727,16 @@ def FindSpectrumLines(spectrumDf):
 	"""
 
 	# Load the table with known emission lines
-	emissionLines = pd.read_csv('./hkSpectrumLines.csv', skiprows=5)
+	emissionLines = pd.read_csv('/Users/nicolasgalvarinoguerravaras/Documents/EMJM_MASS/Thesis/CompositeSpectrum/hkSpectrumLines.csv', skiprows=5)
 
 	# Create temporary storage
 	LineNameList = []
 	LineWavelengthCentre = []
 	LineWavelengthLeft = []
 	LineWavelengthRight = []
+
+	# select lines in the wavelength range covered
+	emissionLines = emissionLines.loc[(emissionLines['Wavelength / Å']>=spectrumDf['wavelength'].min()) & (emissionLines['Wavelength / Å']<=spectrumDf['wavelength'].max())]
 
 	# Loop over all spectrum lines
 	for _, row in emissionLines.iterrows():
@@ -720,6 +747,8 @@ def FindSpectrumLines(spectrumDf):
 		indexSpec = 0 # Spectrum index
 		while (spectrumDf['wavelength'].iloc[indexSpec] < wavelengthLab):
 			indexSpec = indexSpec + 1
+			if indexSpec == (spectrumDf['wavelength'].shape[0] - 1):
+				break
 
 		# IndexSpec now points to the position in SpectrumDf that is associated with the laboratory spectrum line.
 		# The actual spectrum line might however be shifted to the left or to the right.
@@ -728,10 +757,15 @@ def FindSpectrumLines(spectrumDf):
 		# First check to the left
 		while (spectrumDf['mean_f_lambda'].iloc[indexSpec-1] > spectrumDf['mean_f_lambda'].iloc[indexSpec]):
 			indexSpec = indexSpec - 1
+			if indexSpec == 0:
+				break
 
 		# Now check to the right
 		while (spectrumDf['mean_f_lambda'].iloc[indexSpec+1] > spectrumDf['mean_f_lambda'].iloc[indexSpec]):
 			indexSpec = indexSpec + 1
+			print(indexSpec)
+			if indexSpec == (spectrumDf['mean_f_lambda'].shape[0] - 2):
+				break
 
 		# indexSpec now points to the emission peak in the actual spectrum
 		# Store the emissionline name and the actual wavelength in a list for later use
@@ -757,6 +791,8 @@ def FindSpectrumLines(spectrumDf):
 		indexSpecRight = indexSpec
 		while (spectrumDf['mean_f_lambda'].iloc[indexSpecRight] > spectrumDf['continuum'].iloc[indexSpecRight]):
 			indexSpecRight = indexSpecRight + 1
+			if indexSpecRight == (spectrumDf['mean_f_lambda'].shape[0] - 1):
+				break
 
 		wavelengthRight = spectrumDf['wavelength'].iloc[indexSpecRight]
 		LineWavelengthRight.append(wavelengthRight)

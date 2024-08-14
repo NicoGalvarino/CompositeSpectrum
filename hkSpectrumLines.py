@@ -4,7 +4,7 @@ import matplotlib.ticker as tic
 
 def PlotSpectrumLines(ax, lineNameList = [], yText = None):
 	# Load the table with known emission lines
-	emissionLines = pd.read_csv('./hkSpectrumLines.csv', skiprows=5)
+	emissionLines = pd.read_csv('/Users/nicolasgalvarinoguerravaras/Documents/EMJM_MASS/Thesis/CompositeSpectrum/hkSpectrumLines.csv', skiprows=5)
 
 	# Get ymin, ymax
 	yLim = ax.get_ylim()
